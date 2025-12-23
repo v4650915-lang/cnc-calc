@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FANUC G12.1 PRO V.11</title>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --input: #2d2d2d; --yellow: #f1c40f; --text: #ecf0f1; --dim: #7f8c8d; --border: #444; --green: #2ecc71; }
+        body { background: var(--bg); color: var(--text); font-family: 'Roboto Mono', monospace; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .tabs { display: flex; background: #000; border-bottom: 2px solid var(--border); flex-shrink: 0; height: 50px; }
+        .tab-btn { flex: 1; background: #000; color: var(--dim); border: none; font-size: 1rem; font-weight: bold; text-transform: uppercase; cursor: pointer; border-bottom: 4px solid transparent; }
+        .tab-btn.active { color: var(--yellow); border-bottom: 4px solid var(--yellow); }
+        .content { flex: 1; padding: 10px; overflow-y: auto; display: none; }
+        .content.active { display: block; }
+        .control-group { background: var(--panel); padding: 10px; border-radius: 6px; margin-bottom: 8px; border: 1px solid var(--border); }
+        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .row:last-child { margin-bottom: 0; }
+        label { color: var(--dim); font-size: 0.85rem; }
+        .hint { display: block; font-size: 0.7rem; color: var(--yellow); }
+        input, select { background: var(--input); border: 1px solid var(--border); color: var(--yellow); font-size: 1.1rem; padding: 8px; border-radius: 4px; width: 90px; text-align: center; font-family: 'Roboto Mono', monospace; outline: none; }
+        select { width: 140px; font-size: 0.9rem; }
+        .canvas-container { width: 100%; height: 250px; background: #000; border: 1px solid var(--border); border-radius: 4px; margin-top: 10px; position: relative; }
+        canvas { width: 100%; height: 100%; }
+        .sim-status { position: absolute; top: 5px; left: 5px; font-size: 0.7rem; color: #555; pointer-events: none; }
+        .gcode-wrapper { display: flex; flex-direction: column; height: 100%; }
+        textarea { flex: 1; background: #000; color: var(--green); font-size: 18px; font-weight: bold; line-height: 1.4; padding: 10px; border: none; resize: none; white-space: pre; font-family: 'Courier New', monospace; }
+        .copy-btn { background: var(--yellow); color: #000; font-size: 1.2rem; font-weight: 900; padding: 20px; border: none; text-transform: uppercase; cursor: pointer; width: 100%; flex-shrink: 0; }
+        .main-btn { width: 100%; padding: 15px; background: var(--yellow); color: #000; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 4px; text-transform: uppercase; margin-top: 5px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('draw')">НАСТРОЙКИ</button>
+    <button class="tab-btn" onclick="switchTab('code')">G-КОД</button>
+</div>
+
+<div id="tab-draw" class="content active">
+    <div class="control-group">
+        <div class="row">
+            <label>ФОРМА</label>
+            <select id="shape" onchange="vib(); updateUI()">
+                <option value="6">Шестигранник</option>
+                <option value="4">Квадрат</option>
+                <option value="2">Лыски (2)</option>
+                <option value="custom">Кастом (N)</option>
+            </select>
+        </div>
+        <div class="row" id="customRow" style="display:none">
+            <label>ГРАНЕЙ (N)</label>
+            <input type="number" id="sides" value="5" oninput="vib()">
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="row">
+            <div><label>S (ПОД КЛЮЧ)</label><span class="hint" id="stockHint">ЗАГОТОВКА: ⌀0.0</span></div>
+            <input type="number" id="S" value="27.0" step="0.1" oninput="vib(); updateStock()">
+        </div>
+        <div class="row">
+            <label>R (СКРУГЛЕНИЕ)</label>
+            <input type="number" id="R" value="0.5" step="0.1" min="0" oninput="vib()">
+        </div>
+        <div class="row">
+            <label>ГЛУБИНА (Z)</label>
+            <input type="number" id="depth" value="10.0" step="0.5" oninput="vib()">
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="row">
+            <label>ФРЕЗА ⌀</label>
+            <input type="number" id="D" value="12.0" step="0.1" oninput="vib(); syncVc()">
+        </div>
+        <div class="row">
+            <label>ЗУБЬЕВ</label>
+            <input type="number" id="Z" value="4" oninput="vib()">
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="row">
+            <label>НАПРАВЛЕНИЕ</label>
+            <select id="dir" onchange="vib()">
+                <option value="climb">ПОПУТНОЕ</option>
+                <option value="conv">ВСТРЕЧНОЕ</option>
+            </select>
+        </div>
+        <div class="row">
+            <label>ОБОРОТЫ (S)</label>
+            <input type="number" id="rpm" value="2000" oninput="vib(); syncVc()">
+        </div>
+        <div class="row">
+            <label>Vc (М/МИН)</label>
+            <input type="number" id="vc" value="75" oninput="vib(); syncRpm()">
+        </div>
+        <div class="row">
+            <label>Fz (НА ЗУБ)</label>
+            <input type="number" id="fz" value="0.05" step="0.01" oninput="vib()">
+        </div>
+    </div>
+    <button class="main-btn" onclick="vib(); calculate()">РАССЧИТАТЬ</button>
+    <div class="canvas-container">
+        <div class="sim-status">СИМУЛЯЦИЯ</div>
+        <canvas id="simCanvas"></canvas>
+    </div>
+</div>
+
+<div id="tab-code" class="content" style="padding:0;">
+    <div class="gcode-wrapper">
+        <textarea id="gcodeArea" readonly>Нажмите РАССЧИТАТЬ</textarea>
+        <button class="copy-btn" onclick="copyCode()">КОПИРОВАТЬ КОД</button>
+    </div>
+</div>
+
+<script>
+    function vib() { if (navigator.vibrate) navigator.vibrate(5); }
+    function switchTab(t) {
+        vib();
+        document.querySelectorAll('.content').forEach(e => e.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+        document.getElementById('tab-' + t).classList.add('active');
+        if(t==='draw') document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        else document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    }
+    function syncVc() {
+        const D = parseFloat(document.getElementById('D').value);
+        const rpm = parseFloat(document.getElementById('rpm').value);
+        if(D > 0 && rpm > 0) { 
+            const val = (Math.PI * D * rpm) / 1000;
+            document.getElementById('vc').value = val.toFixed(0);
+        }
+    }
+    function syncRpm() {
+        const D = parseFloat(document.getElementById('D').value);
+        const vc = parseFloat(document.getElementById('vc').value);
+        if(D > 0 && vc > 0) {
+            const val = (vc * 1000) / (Math.PI * D);
+            document.getElementById('rpm').value = Math.round(val);
+        }
+    }
+    function updateUI() {
+        const type = document.getElementById('shape').value;
+        document.getElementById('customRow').style.display = (type === 'custom') ? 'flex' : 'none';
+        updateStock();
+    }
+    function updateStock() {
+        let N = document.getElementById('shape').value;
+        if(N === 'custom') N = document.getElementById('sides').value;
+        const S = parseFloat(document.getElementById('S').value);
+        let minD = (N==2) ? S : S / Math.cos(Math.PI/N);
+        document.getElementById('stockHint').innerText = `ЗАГОТОВКА: ⌀${minD.toFixed(2)}`;
+    }
+    function copyCode() {
+        vib();
+        const txt = document.getElementById('gcodeArea');
+        txt.select();
+        txt.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(txt.value).then(() => { alert("Скопировано!"); });
+    }
+
+    let pathPoints = [];
+    let animId = null;
+    let simData = { N: 6, S: 27, D: 12 };
+
+    function calculate() {
+        let N = document.getElementById('shape').value;
+        if(N === 'custom') N = parseInt(document.getElementById('sides').value);
+        else N = parseInt(N);
+        
+        const S = parseFloat(document.getElementById('S').value);
+        const R = parseFloat(document.getElementById('R').value);
+        const D = parseFloat(document.getElementById('D').value);
+        const Z_depth = parseFloat(document.getElementById('depth').value);
+        const rpm = parseInt(document.getElementById('rpm').value);
+        const fz = parseFloat(document.getElementById('fz').value);
+        const zt = parseInt(document.getElementById('Z').value);
+        const dir = document.getElementById('dir').value;
+        const isClimb = (dir === 'climb');
+
+        simData = { N, S, D };
+        const feed = Math.round(rpm * fz * zt);
+        const r_tool = D / 2;
+        const r_in = S / 2;
+        const r_path = r_in + r_tool; 
+        const R_total = R + r_tool;
+
+        // Расчет безопасного диаметра
+        let stockD = (N==2) ? S : S / Math.cos(Math.PI/N);
+        let safeX = stockD + D + 3.0;
+
+        const isSharp = (R <= 0.001 && N >= 3);
+
+        let g = `%\nO0001(N${N} S${S} D${D} R${R})\n`;
+        g += `G0 G40 G97 G98\n`;
+        g += `T0101 M5 (Freza=${D})\n`;
+        g += `(C axis on)\n`;
+        g += `G28H0.\n`;
+        g += `M3 S${rpm}\n`;
+        g += `G0 X${safeX.toFixed(3)} Z2. C0.\n`;
+        g += `G1 Z-${Z_depth} F1000\n`;
+        g += `G12.1 (POLAR-ON)\n`;
+
+        pathPoints = []; 
+        const step = (Math.PI * 2) / N;
+        const halfStep = step / 2;
+        const distToCenterArc = (N==2) ? (S*0.7) : ((r_in - R) / Math.cos(halfStep));
+        const distSharpVertex = (r_in + r_tool) / Math.cos(halfStep);
+        const gArc = isClimb ? 'G03' : 'G02';
+
+        let firstPointGCode = ""; // Для запоминания старта
+
+        for(let i=0; i<N; i++) {
+            let angle = isClimb ? (i * step) : (-i * step);
+            let dirSign = isClimb ? 1 : -1;
+            let vertexAngle = angle + halfStep * dirSign;
+
+            if (isSharp) {
+                // R=0 Острые углы
+                let vx = distSharpVertex * Math.cos(vertexAngle);
+                let vy = distSharpVertex * Math.sin(vertexAngle);
+                let lineStr = `X${(vx*2).toFixed(3)} C${vy.toFixed(3)}`;
+
+                if (i===0) {
+                    g += `G01 ${lineStr} F${feed}\n`;
+                    firstPointGCode = lineStr; // Запоминаем первую точку
+                } else {
+                    g += `G01 ${lineStr}\n`;
+                }
+                pathPoints.push({x: vx, y: vy});
+
+            } else {
+                // Скругления
+                let cx, cy;
+                if (N === 2) {
+                    let shift = (r_in*1.5);
+                    let nx = Math.cos(angle); let ny = Math.sin(angle);
+                    let tx = -ny * dirSign; let ty = nx * dirSign;
+                    cx = (r_in - R) * nx + shift * tx;
+                    cy = (r_in - R) * ny + shift * ty;
+                } else {
+                    cx = distToCenterArc * Math.cos(vertexAngle);
+                    cy = distToCenterArc * Math.sin(vertexAngle);
+                }
+
+                let a1 = angle; 
+                let a2 = angle + step * dirSign;
+                if (N===2) { a1 = angle; a2 = angle + Math.PI; }
+
+                let p1x = cx + R_total * Math.cos(a1);
+                let p1y = cy + R_total * Math.sin(a1);
+                let p2x = cx + R_total * Math.cos(a2);
+                let p2y = cy + R_total * Math.sin(a2);
+                
+                let lineStr = `X${(p1x*2).toFixed(3)} C${p1y.toFixed(3)}`;
+
+                if (i===0) {
+                    g += `G01 ${lineStr} F${feed}\n`;
+                    firstPointGCode = lineStr; // Запоминаем старт
+                } else {
+                    g += `G01 ${lineStr}\n`;
+                }
+
+                if (R_total > 0.001) {
+                    g += `${gArc} X${(p2x*2).toFixed(3)} C${p2y.toFixed(3)} R${R_total.toFixed(3)}\n`;
+                }
+
+                pathPoints.push({x: p1x, y: p1y});
+                // Интерполяция визуала
+                const startAng = Math.atan2(p1y - cy, p1x - cx);
+                let endAng = Math.atan2(p2y - cy, p2x - cx);
+                if (isClimb) { if (endAng <= startAng) endAng += Math.PI*2; }
+                else { if (endAng >= startAng) endAng -= Math.PI*2; }
+                for(let k=1; k<=8; k++) {
+                    let t = k/8;
+                    let ang = startAng + (endAng - startAng)*t;
+                    pathPoints.push({x: cx+R_total*Math.cos(ang), y: cy+R_total*Math.sin(ang)});
+                }
+            }
+        }
+        
+        // --- ЗАМЫКАНИЕ КОНТУРА (CLEANUP PASS) ---
+        // Добавляем проход в начальную точку
+        if (firstPointGCode) {
+            g += `G01 ${firstPointGCode} (CLOSE PROFILE)\n`;
+        }
+        
+        g += `G13.1 (POLAR-ON)\n`;
+        g += `G0 Z10. M5\n`;
+        g += `(C axis off)\n`;
+        g += `M9\n`;
+        g += `G99\n`;
+        g += `G28 U0.\n`;
+        g += `G28 W0.\n`;
+        g += `M30\n%`;
+        
+        document.getElementById('gcodeArea').value = g;
+        startAnimation(isClimb);
+    }
+
+    function startAnimation(isClimb) {
+        if(animId) cancelAnimationFrame(animId);
+        const cvs = document.getElementById('simCanvas');
+        const ctx = cvs.getContext('2d');
+        cvs.width = cvs.clientWidth; cvs.height = cvs.clientHeight;
+        
+        let pointIdx = 0; let toolRot = 0;
+        function render() {
+            pointIdx += 0.03; 
+            if (pointIdx >= pathPoints.length) pointIdx = 0;
+            
+            let idx = Math.floor(pointIdx);
+            let nextIdx = (idx + 1) % pathPoints.length;
+            let t = pointIdx - idx;
+            let p1 = pathPoints[idx]; let p2 = pathPoints[nextIdx];
+            
+            let curX = p1.x + (p2.x - p1.x) * t;
+            let curY = p1.y + (p2.y - p1.y) * t;
+            
+            let radius = Math.sqrt(curX*curX + curY*curY);
+            let angle = Math.atan2(curY, curX);
+
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0, cvs.width, cvs.height);
+            const cx = cvs.width / 2; const cy = cvs.height / 2;
+            const scale = (Math.min(cx, cy) - 30) / (simData.S);
+
+            // Деталь
+            ctx.save(); ctx.translate(cx, cy); ctx.rotate(-angle - Math.PI/2); 
+            ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 3; ctx.beginPath();
+            const step = (Math.PI * 2) / simData.N;
+            const r_vert = (simData.S/2) / Math.cos(step/2);
+            for(let i=0; i<=simData.N; i++) {
+                let a = i * step + step/2;
+                let px = r_vert * Math.cos(a) * scale;
+                let py = r_vert * Math.sin(a) * scale;
+                if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+            }
+            ctx.stroke(); ctx.restore();
+
+            // Фреза
+            let toolScreenY = cy - radius * scale;
+            ctx.save(); ctx.translate(cx, toolScreenY);
+            toolRot += 0.05; ctx.rotate(toolRot);
+            let rToolPx = (simData.D/2) * scale;
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.5)'; ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0,0, rToolPx, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-rToolPx, 0); ctx.lineTo(rToolPx, 0); ctx.moveTo(0, -rToolPx); ctx.lineTo(0, rToolPx); ctx.stroke();
+            ctx.restore();
+
+            // Ось
+            ctx.strokeStyle = '#333'; ctx.setLineDash([2,4]); ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cvs.height); ctx.stroke();
+            animId = requestAnimationFrame(render);
+        }
+        render();
+    }
+    syncVc(); updateUI(); calculate();
+</script>
+</body>
+</html>
