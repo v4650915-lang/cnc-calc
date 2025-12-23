@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CNC Calc Mobile Pro</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0a0a0a;
+            --bg-card: #141414;
+            --fanuc-yellow: #FFEB3B;
+            --eng-white: #ffffff;
+            --digital-cyan: #00FFFF;
+            --border: #333;
+        }
+
+        body { 
+            background-color: var(--bg-main); color: #eee; font-family: sans-serif; 
+            margin: 0; padding: 10px; overflow-x: hidden; -webkit-tap-highlight-color: transparent;
+        }
+        
+        .card { background: var(--bg-card); border: 1px solid var(--border); padding: 15px; border-radius: 4px; max-width: 500px; margin: auto; }
+        h2 { color: var(--fanuc-yellow); text-transform: uppercase; margin: 0 0 15px 0; border-bottom: 2px solid var(--fanuc-yellow); padding-bottom: 5px; font-size: 16px; }
+
+        .layout { display: flex; flex-direction: column; gap: 15px; }
+        .diag-box { background: #000; border: 1px solid var(--border); display: flex; justify-content: center; align-items: center; padding: 15px; min-height: 240px; }
+
+        svg { shape-rendering: geometricPrecision; width: 100%; height: auto; max-width: 300px; }
+        .tri-line { stroke: var(--eng-white); stroke-width: 3.5; fill: none; stroke-linejoin: round; }
+        .h-line { stroke: var(--eng-white); stroke-width: 2.5; stroke-dasharray: 8,6; opacity: 0.8; }
+        .perp-mark { stroke: var(--eng-white); stroke-width: 2; fill: none; stroke-linejoin: round; }
+        .dot { fill: var(--eng-white); }
+        .label-text { fill: var(--eng-white); font-family: 'Share Tech Mono'; font-size: 22px; font-weight: bold; }
+
+        /* Состояния Flip */
+        .g-state { display: none; }
+        #diagSvg:not(.fx):not(.fy) .g-normal { display: inline; }
+        #diagSvg.fx:not(.fy) .g-fx { display: inline; }
+        #diagSvg.fy:not(.fx) .g-fy { display: inline; }
+        #diagSvg.fx.fy .g-fxy { display: inline; }
+
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .btn { background: #2a2a2a; color: var(--fanuc-yellow); border: 1px solid #444; padding: 14px; font-size: 12px; cursor: pointer; font-weight: bold; text-transform: uppercase; }
+        .btn.active { background: #444; border-color: var(--fanuc-yellow); color: #fff; }
+
+        .input-col { display: flex; flex-direction: column; gap: 12px; }
+        .field label { color: var(--fanuc-yellow); font-size: 11px; font-weight: bold; margin-bottom: 5px; display: block; }
+        input { background: #222; border: 1px solid #444; color: #fff; padding: 14px; font-family: 'Share Tech Mono'; font-size: 22px; border-radius: 4px; width: 100%; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--digital-cyan); background: #2a2a2a; }
+
+        .results { margin-top: 15px; background: #050505; border: 1px solid var(--border); padding: 12px; font-family: 'Share Tech Mono', monospace; }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1a1a1a; font-size: 18px; }
+        .val { color: var(--digital-cyan); font-weight: bold; }
+        .reset-btn { margin-top: 10px; padding: 16px; width: 100%; background: #333; color: var(--fanuc-yellow); border: 1px solid #555; font-weight: bold; font-size: 16px; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>📐 ПРЯМОУГОЛЬНЫЙ ТРЕУГОЛЬНИК</h2>
+    <div class="layout">
+        <div class="diag-box">
+            <svg id="diagSvg" viewBox="0 0 280 220">
+                <g class="g-state g-normal">
+                    <path d="M 50 40 L 50 170 L 220 170 Z" class="tri-line" />
+                    <path d="M 50 145 L 65 145 L 65 170" class="perp-mark" /><circle cx="63" cy="157" r="3" class="dot" />
+                    <path d="M 50 170 L 115 85" class="h-line" />
+                    <text x="25" y="110" class="label-text">a</text><text x="135" y="195" class="label-text">b</text><text x="150" y="85" class="label-text">c</text>
+                    <text x="95" y="140" class="label-text">h</text>
+                    <text x="185" y="160" class="label-text">α</text><text x="60" y="65" class="label-text">β</text>
+                </g>
+                <g class="g-state g-fx">
+                    <path d="M 230 40 L 230 170 L 60 170 Z" class="tri-line" />
+                    <path d="M 230 155 L 215 155 L 215 170" class="perp-mark" /><circle cx="217" cy="157" r="3" class="dot" />
+                    <path d="M 230 170 L 165 85" class="h-line" />
+                    <text x="245" y="110" class="label-text">a</text><text x="135" y="195" class="label-text">b</text><text x="110" y="85" class="label-text">c</text>
+                    <text x="175" y="140" class="label-text">h</text>
+                    <text x="85" y="160" class="label-text">α</text><text x="210" y="65" class="label-text">β</text>
+                </g>
+                <g class="g-state g-fy">
+                    <path d="M 50 180 L 50 50 L 220 50 Z" class="tri-line" />
+                    <path d="M 50 65 L 65 65 L 65 50" class="perp-mark" /><circle cx="63" cy="63" r="3" class="dot" />
+                    <path d="M 50 50 L 115 135" class="h-line" />
+                    <text x="25" y="115" class="label-text">a</text><text x="135" y="35" class="label-text">b</text><text x="150" y="135" class="label-text">c</text>
+                    <text x="95" y="100" class="label-text">h</text>
+                    <text x="185" y="75" class="label-text">α</text><text x="60" y="155" class="label-text">β</text>
+                </g>
+                <g class="g-state g-fxy">
+                    <path d="M 230 180 L 230 50 L 60 50 Z" class="tri-line" />
+                    <path d="M 230 65 L 215 65 L 215 50" class="perp-mark" /><circle cx="217" cy="63" r="3" class="dot" />
+                    <path d="M 230 50 L 165 135" class="h-line" />
+                    <text x="245" y="115" class="label-text">a</text><text x="135" y="35" class="label-text">b</text><text x="110" y="135" class="label-text">c</text>
+                    <text x="175" y="100" class="label-text">h</text>
+                    <text x="85" y="75" class="label-text">α</text><text x="210" y="155" class="label-text">β</text>
+                </g>
+            </svg>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" id="btnX" onclick="toggle('x')">↔ ГОР.</button>
+            <button class="btn" id="btnY" onclick="toggle('y')">↕ ВЕРТ.</button>
+        </div>
+
+        <div class="input-col">
+            <div class="field"><label>КАТЕТ A</label><input type="number" id="a" step="any" inputmode="decimal" placeholder="0.000"></div>
+            <div class="field"><label>КАТЕТ B</label><input type="number" id="b" step="any" inputmode="decimal" placeholder="0.000"></div>
+            <div class="field"><label>ГИПОТЕНУЗА C</label><input type="number" id="c" step="any" inputmode="decimal" placeholder="0.000"></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="field"><label>УГОЛ α (°)</label><input type="number" id="alpha" step="any" inputmode="decimal" placeholder="0.000"></div>
+                <div class="field"><label>УГОЛ β (°)</label><input type="number" id="beta" step="any" inputmode="decimal" placeholder="0.000"></div>
+            </div>
+            <button class="reset-btn" id="resetBtn" onclick="clearAll()">СБРОС</button>
+        </div>
+    </div>
+
+    <div class="results" id="res">
+        <div style="color:#444; text-align:center;">ОЖИДАНИЕ ДАННЫХ</div>
+    </div>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    const inputs = ['a', 'b', 'c', 'alpha', 'beta'].reduce((acc, id) => ({...acc, [id]: document.getElementById(id)}), {});
+
+    Object.values(inputs).forEach(el => {
+        el.addEventListener('focus', () => { tg.HapticFeedback.impactOccurred('light'); });
+        el.addEventListener('input', (e) => {
+            if (e.target.id === 'alpha' || e.target.id === 'beta') sync(e.target.id);
+            calculate();
+        });
+    });
+
+    let fx = false, fy = false;
+    function toggle(axis) {
+        tg.HapticFeedback.impactOccurred('medium');
+        if (axis === 'x') fx = !fx; else fy = !fy;
+        document.getElementById('diagSvg').className.baseVal = (fx ? 'fx ' : '') + (fy ? 'fy' : '');
+        document.getElementById('btnX').classList.toggle('active', fx);
+        document.getElementById('btnY').classList.toggle('active', fy);
+    }
+
+    function sync(id) {
+        const val = parseFloat(inputs[id].value);
+        const other = id === 'alpha' ? 'beta' : 'alpha';
+        inputs[other].value = (val > 0 && val < 90) ? (90 - val).toFixed(3) : "";
+    }
+
+    function calculate() {
+        let a = parseFloat(inputs.a.value), b = parseFloat(inputs.b.value), c = parseFloat(inputs.c.value), al = parseFloat(inputs.alpha.value);
+        let ra, rb, rc, ral, rbe, rh;
+        if (a && b) { ra = a; rb = b; rc = Math.sqrt(a*a + b*b); }
+        else if (a && c && c > a) { ra = a; rc = c; rb = Math.sqrt(c*c - a*a); }
+        else if (b && c && c > b) { rb = b; rc = c; ra = Math.sqrt(c*c - b*b); }
+        else if (c && al) { rc = c; ral = al; let r = al * Math.PI / 180; ra = c * Math.sin(r); rb = c * Math.cos(r); }
+        else if (a && al) { ra = a; ral = al; let r = al * Math.PI / 180; rc = a / Math.sin(r); rb = a / Math.tan(r); }
+        else if (b && al) { rb = b; ral = al; let r = al * Math.PI / 180; ra = b * Math.tan(r); rc = b / Math.cos(r); }
+
+        if (ra && rb && rc) {
+            ral = Math.atan(ra/rb) * 180 / Math.PI; rbe = 90 - ral; rh = (ra * rb) / rc;
+            document.getElementById('res').innerHTML = `${row("Катет a", ra)} ${row("Катет b", rb)} ${row("Гипотенуза c", rc)} ${row("Высота h", rh)} ${row("Угол α", ral, "°")} ${row("Угол β", rbe, "°")}`;
+        }
+    }
+
+    function row(l, v, u="") { return `<div class="row"><span>${l}</span><span class="val">${v.toFixed(3)}${u}</span></div>`; }
+    function clearAll() { 
+        tg.HapticFeedback.notificationOccurred('warning');
+        Object.values(inputs).forEach(i => i.value = ""); 
+        document.getElementById('res').innerHTML = '<div style="color:#444; text-align:center;">ОЖИДАНИЕ ДАННЫХ</div>'; 
+    }
+</script>
+</body>
+</html>
