@@ -1,0 +1,9 @@
+meta:
+  environment: python
+  toolchain:
+    name: python
+    version: 3.10
+build:
+  requirementsPath: requirements.txt
+run:
+  scriptName: cnc_bot.py
